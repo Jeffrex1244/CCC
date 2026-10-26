@@ -1,0 +1,29 @@
+HOW TO COLLECT MISSING BUILD DEPENDENCIES FOR CHATGPT
+
+The existing ChatGPT container is Linux and has Java, Gradle 8.11.1, and Android SDK 35,
+but no internet access to Maven Central/Google Maven. chaquopy-master.zip is only source.
+
+This package includes a GitHub Actions workflow whose main purpose is to collect
+compiled Gradle/Chaquopy dependencies for upload back to ChatGPT. It attempts an
+online build as a way to force downloading all build artifacts and Python wheels.
+If the online attempt succeeds, the output may also contain standalone-test.apk;
+this has not been tested on your phone and does NOT demonstrate feature parity.
+
+INSTRUCTIONS (no local developer tools needed):
+1. Create a new private GitHub repository. Do not upload Instagram cookies or credentials.
+2. Unzip this project and upload all files and folders, including hidden .github/workflows.
+   GitHub Web UI may hide folders which begin with a dot; check the workflow exists.
+3. Open your repo: Actions > Collect dependencies for local ChatGPT APK build > Run workflow.
+4. Download the linux-chaquopy-dependencies artifact after the job completes.
+5. Extract the artifact ZIP; upload all offline-cache.part-000, 001, etc files
+   and gradle-exit-code.txt and apk-build.log into the same ChatGPT conversation.
+6. ChatGPT can join and extract the cached dependencies into its Linux environment
+   and continue fixing/building/testing the standalone APK.
+
+The artifact can be hundreds of MB. It is broken into 90 MB numbered pieces.
+The GitHub runner uses Ubuntu Linux, matching ChatGPT's host OS family.
+The script collects build caches only, not your account credentials or Instagram cookies.
+Only upload the generated cache from this fresh, private repository/workflow.
+
+NOTE: The workflow is an external dependency collector, not an assurance that the
+app functions perfectly. Login, downloads, exports, 2FA and app lifecycle need device tests.
