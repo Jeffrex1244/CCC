@@ -1,0 +1,69 @@
+name: Collect dependencies for local ChatGPT APK build
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up build Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install required Android packages
+        run: |
+          sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
+          yes | sdkmanager --licenses || true
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Resolve ALL build dependencies (compile if possible)
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon --stacktrace assembleDebug > apk-build.log 2>&1
+          rc=$?
+          echo "Gradle exit code: $rc"
+          tail -n 90 apk-build.log
+          echo "$rc" > gradle-exit-code.txt
+          exit 0  # still upload dependency bundle on an app-code failure
+      - name: Create transferable Linux dependency cache (90 MB parts)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p payload/gradle payload/pip payload/chaquopy output
+          if [ -d "$HOME/.gradle/caches" ]; then
+            cp -a "$HOME/.gradle/caches" payload/gradle/
+          fi
+          if [ -d "$HOME/.cache/pip" ]; then
+            cp -a "$HOME/.cache/pip" payload/pip/
+          fi
+          if [ -d "$HOME/.cache/chaquopy" ]; then
+            cp -a "$HOME/.cache/chaquopy" payload/chaquopy/
+          fi
+          echo 'gradle cache -> ~/.gradle/caches; pip -> ~/.cache/pip; chaquopy -> ~/.cache/chaquopy' > payload/README.txt
+          tar -C payload -czf output/gradle-chaquopy-offline.tar.gz .
+          split -d -a 3 -b 90000000 output/gradle-chaquopy-offline.tar.gz output/offline-cache.part-
+          rm output/gradle-chaquopy-offline.tar.gz
+          cp apk-build.log gradle-exit-code.txt output/
+          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp app/build/outputs/apk/debug/app-debug.apk output/standalone-test.apk
+          fi
+          ls -lh output
+      - name: Upload bundles to download and forward into ChatGPT
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-chaquopy-dependencies
+          path: output/
+          retention-days: 3
