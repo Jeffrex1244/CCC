@@ -90,7 +90,33 @@ jobs:
           echo "$status" > runtime-only-exit-code.txt
           tail -n 35 android-runtime-only-build.log
           exit 0
-      - name: Add V1.5 downloader Python dependencies
+      - name: Collect Python packages and runtime cache
         shell: bash
+        if: always()
         run: |
-          python - <<'PYTHON'
+          set -euo pipefail
+          mkdir -p output/wheels
+          python -m pip download --pre -d output/wheels 'gallery-dl==1.32.18' 'instaloader==4.16b1' > output/python-download.log 2>&1 || true
+          sed -i "/version '3.13'/a\\                pip { install 'gallery-dl==1.32.18'; install 'instaloader==4.16b1' }" offline-probe/app/build.gradle
+          set +e
+          (cd offline-probe && gradle --no-daemon :app:assembleDebug) > output/python-android-build.log 2>&1
+          echo "$?" > output/python-build-exit-code.txt
+          set -e
+          cp android-runtime-only-build.log output/
+          cp runtime-only-exit-code.txt output/
+          cp offline-probe/app/build/outputs/apk/debug/app-debug.apk output/runtime-probe.apk || true
+          paths=(.gradle/caches)
+          [ ! -d "$HOME/.cache/chaquopy" ] || paths+=(.cache/chaquopy)
+          [ ! -d "$HOME/.gradle/chaquopy" ] || paths+=(.gradle/chaquopy)
+          tar -C "$HOME" -czf output/runtime-cache.tar.gz "${paths[@]}"
+          split -d -a 3 -b 75m output/runtime-cache.tar.gz output/runtime-cache.part-
+          rm output/runtime-cache.tar.gz
+          ls -lh output/
+      - name: Upload standalone runtime dependency bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: standalone-android-python-runtime
+          path: output/
+          if-no-files-found: error
+          retention-days: 3
